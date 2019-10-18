@@ -145,7 +145,7 @@ def archive_files(yga, subdir=None, skip_existing=True):
         if path['type'] == 0:
             # Regular file
             name = unescape_html(path['fileName'])
-            print "* Fetching file '%s' (%d/%d)" % (name, n, sz)
+            print "* Fetching file %r (%d/%d)" % (name, n, sz)
             fname = basename(name)
             if skip_existing and os.path.isfile(fname):
                 print "File %r exists, skipping" % fname
@@ -164,7 +164,7 @@ def archive_files(yga, subdir=None, skip_existing=True):
         set_mtime(fname, path['createdTime'])
 
 
-def archive_photos(yga):
+def archive_photos(yga, skip_existing=True):
     albums = yga.albums()
     n = 0
 
@@ -186,6 +186,9 @@ def archive_photos(yga):
 
                 photoinfo = get_best_photoinfo(photo['photoInfo'])
                 fname = "%d-%s.jpg" % (photo['photoId'], basename(pname))
+                if skip_existing and os.path.isfile(fname):
+                    print "File %r exists, skipping" % fname
+                    continue
                 try:
                     with open(fname, 'wb') as f:
                         yga.download_file(photoinfo['displayURL'], f)
@@ -195,7 +198,7 @@ def archive_photos(yga):
         set_mtime(album_fname, a['modificationDate'])
 
 
-def archive_db(yga, group):
+def archive_db(yga, group, skip_existing=True):
     json = yga.database()
     n = 0
     nts = len(json['tables'])
@@ -204,9 +207,13 @@ def archive_db(yga, group):
         print "* Downloading database table '%s' (%d/%d)" % (table['name'], n, nts)
 
         name = basename(table['name']) + '.csv'
+        if skip_existing and os.path.isfile(name):
+            print "File %r exists, skipping" % name
+            continue
         uri = "https://groups.yahoo.com/neo/groups/%s/database/%s/records/export?format=csv" % (group, table['tableId'])
         with open(name, 'w') as f:
             yga.download_file(uri, f)
+        set_mtime(name, table['dateLastModified'])
 
 class Mkchdir:
     d = ""
@@ -247,6 +254,9 @@ if __name__ == "__main__":
     pe.add_argument('-s', '--no-save', action='store_true',
             help="Don't save email attachments as individual files")
 
+    p.add_argument('--overwrite', action='store_true',
+                   help="Re-download and overwrite existing files and messages")
+
     p.add_argument('group', type=str)
 
     args = p.parse_args()
@@ -261,17 +271,21 @@ if __name__ == "__main__":
 
     if not (args.email or args.files or args.photos or args.database):
         args.email = args.files = args.photos = args.database = True
+    skip_existing = not args.overwrite
 
     with Mkchdir(args.group):
         if args.email:
             with Mkchdir('email'):
-                archive_email(yga, reattach=(not args.no_reattach), save=(not args.no_save))
+                archive_email(yga,
+                              reattach=(not args.no_reattach),
+                              save=(not args.no_save),
+                              skip_existing=skip_existing)
         if args.files:
             with Mkchdir('files'):
-                archive_files(yga)
+                archive_files(yga, skip_existing=skip_existing)
         if args.photos:
             with Mkchdir('photos'):
-                archive_photos(yga)
+                archive_photos(yga, skip_existing=skip_existing)
         if args.database:
             with Mkchdir('databases'):
-                archive_db(yga, args.group)
+                archive_db(yga, args.group, skip_existing=skip_existing)
