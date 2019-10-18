@@ -48,13 +48,18 @@ class YahooGroupsAPI:
 
     def _get(self, url, *args, **kw):
         holdoffs = iter([1.0, 1.5, 2.0, 5.0, 10.0, 10.0])
+        user_agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.47 Safari/537.36'
+        headers = {'User-Agent': user_agent}
 
-        r = self.s.get(url, *args, **kw)
+        r = self.s.get(url, headers=headers, *args, **kw)
         while r.status_code == 400:
             holdoff = next(holdoffs, None)
             if holdoff is None:
                 break
             print "[Status 400 for %s, retrying]" % (url,)
+            with open("failed.log", "a") as myfile:
+              myfile.write(url+"\n")
+
             time.sleep(holdoff)
             r = self.s.get(url, *args, **kw)
         r.raise_for_status()
